@@ -21,7 +21,7 @@ def matfile_to_dic(folder_path): #返回一个字典，关键字是文件名，�
     for _, filepath in enumerate(folder_path.glob('*.mat')):
         key_name = str(filepath).split('\\')[-1]
         output_dic[key_name] = scipy.io.loadmat(filepath, squeeze_me=True)
-    return output_dic 
-
+    
+    
 
     
