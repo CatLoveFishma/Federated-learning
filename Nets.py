@@ -21,6 +21,7 @@ class MLP(nn.Module):
     def forward(self, x):
         #x = x.view(-1, x.shape[1]*x.shape[-2]*x.shape[-1])
         #view()函数通常用于数据维度的变化,在这里的作用是行数自动变化，但是列数为
+        x=x.to(torch.float32)
         x = self.layer_input(x)
         #输入处理后的数据
         x = self.dropout(x)
@@ -29,3 +30,35 @@ class MLP(nn.Module):
         #激活函数
         x = self.layer_hidden(x)
         return x
+
+
+class CNN_1D_2L(nn.Module):
+    def __init__(self, n_in):
+        super().__init__()
+        self.n_in = n_in
+        self.layer1 = nn.Sequential(
+            nn.Conv1d(1, 64, (9,), stride=1, padding=4),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.MaxPool1d(2,stride=2)
+        )
+        
+        
+        self.layer2 = nn.Sequential(
+            nn.Conv1d(64, 128, (5,), stride=1, padding=2),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.AvgPool1d(2,stride=2)
+        )
+        
+        self.linear1 = nn.Linear(self.n_in*128 //4, 4)
+
+        
+    def forward(self, x):
+        x = x.view(-1, 1, self.n_in)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = x.view(-1, self.n_in*128//4)
+        return self.linear1(x)

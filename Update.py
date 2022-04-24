@@ -65,3 +65,9 @@ class LocalUpdate(object):
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
         return net.state_dict(), sum(epoch_loss) / len(epoch_loss)
         #state_dict包含了权重，用于聚合
+
+def normalization(data):
+    for i,j in enumerate(data):
+        x=(j-0)/3
+        data[i]=x
+    return data
