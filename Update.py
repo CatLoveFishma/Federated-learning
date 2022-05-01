@@ -39,7 +39,8 @@ class LocalUpdate(object):
     def train(self, net):
         net.train()
         # train and update
-        optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
+        #optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
+        optimizer = torch.optim.Adam(net.parameters(), lr=self.args.lr, betas=self.args.betas, weight_decay=self.args.wd)
         #设置优化器，默认lr=0.01，默认momentum=0.5,momentum是带动量的随机梯度下降
         epoch_loss = [] #每一轮的损失
         for iter in range(self.args.local_ep): #循环epoch次

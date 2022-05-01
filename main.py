@@ -1,3 +1,4 @@
+from fileinput import filename
 import os
 import json
 import scipy.io
@@ -15,6 +16,9 @@ from Options import args_parser
 from torchvision import datasets, transforms 
 import copy
 from tools import FedAvg, test_model 
+import time
+
+
 
 args=args_parser()
 filepath=Path('12k_DE')
@@ -44,17 +48,19 @@ for name,data in dataDic.items():
                 processed_data[3].extend(data[iname])
 splited_data=[]
 label=[]
+
+data_length=200
 for name,data in processed_data.items():
     n=len(data)
-    x=n//500
+    x=n//data_length
     for i in range(x):
-        splited_data.append(data[i*500:(i+1)*500])
+        splited_data.append(data[i*data_length:(i+1)*data_length])
         label.append(name)
 
 
 data_type='iid'
-clients_all=100
-frac=0.1 #每次训练的客户占所有客户的比例
+clients_all=1000
+ #每次训练的客户占所有客户的比例
 
 splited_data=torch.tensor(splited_data,dtype=torch.float32)
 label=torch.tensor(label,dtype=torch.long)
@@ -78,28 +84,70 @@ if data_type =='iid':
 
 
 
-net_glob=CNN_1D_2L(500)
+net_glob=CNN_1D_2L(data_length)
 print(net_glob)
 net_glob.train()
 w_glob = net_glob.state_dict()
-
+'''''
 class option:
     def __init__(self):
-        self.lr=0.03
+        self.lr=0.001
         self.momentum=0.5
         self.local_ep=10
         self.device='cpu'
         self.verbose=False
         self.local_bs=10
-        self.bs=10
-args=option()
+        self.bs=64
+        self.betas=(0.99,0.999)
+        self.wd=1e-5
+        self.precision=4
+'''''
+args=args_parser()
 
-epochs=40
-local_epoch=5
+epochs=12
+#经过测试，12时不在收敛
+local_epoch=3
 loss_train=[]
+frac=args.r
+#[local_epochs,precision,r]
 
+chanshu=[[20,7,0.1],[20,7,0.3],[20,7,0.5],[20,6,0.5],[20,5,0.5],[20,4,0.5],[17,7,0.5],[14,7,0.5]]
+for x in chanshu:
+    args.local_ep=x[0]
+    frac=x[2]
+    args.precision=x[1]
+    savemodel='models'+"\saved_models_local_epochs_"+str(x[0])+"_r_"+str(x[2]).replace('.', '_')+"_precision_"+str(x[1])
+    os.system('mkdir '+savemodel)
+    for iter in range(epochs):
+        start=time.perf_counter()
+        loss_locals=[]
+        w_locals = [w_glob for i in range(clients_all)]
+        m=round(frac*clients_all)
+        idxs_users=np.random.choice(range(clients_all),m,replace=False)
+        #选出来的是客户的编号
+        for idx in idxs_users:
+            local=LocalUpdate(args=args,dataset=data_and_label,idxs=dict_users[idx])
+            w,loss=local.train(net=copy.deepcopy(net_glob))
+            w_locals[idx]=copy.deepcopy(w)
+            loss_locals.append(copy.deepcopy(loss))
+        w_glob=FedAvg(w_locals,args.precision)
+        net_glob.load_state_dict(w_glob)
+        
+        torch.save(net_glob,savemodel+"/model_epoch_"+str(iter+1)+".pt")
+        loss_avg=sum(loss_locals)/len(loss_locals)
+        end=time.perf_counter()
+        print('Round {:3d}, Average loss {:.3f},time_used {}'.format(iter, loss_avg,end-start))
+        loss_train.append(loss_avg)    
 
+    net_glob.eval()
+    #acc_train, loss_train = test_model(net_glob, dataset_train, args)
+    acc_test, loss_test = test_model(net_glob, data_and_label,test_idxs, args)
+    #print("Training accuracy: {:.2f}".format(acc_train))
+    print("Testing accuracy: {:.2f}".format(acc_test))
+'''''
 for iter in range(epochs):
+
+    start=time.perf_counter()
     loss_locals=[]
     w_locals = [w_glob for i in range(clients_all)]
     m=round(frac*clients_all)
@@ -110,10 +158,11 @@ for iter in range(epochs):
         w,loss=local.train(net=copy.deepcopy(net_glob))
         w_locals[idx]=copy.deepcopy(w)
         loss_locals.append(copy.deepcopy(loss))
-    w_glob=FedAvg(w_locals)
+    w_glob=FedAvg(w_locals,args.precision)
     net_glob.load_state_dict(w_glob)
     loss_avg=sum(loss_locals)/len(loss_locals)
-    print('Round {:3d}, Average loss {:.3f}'.format(iter, loss_avg))
+    end=time.perf_counter()
+    print('Round {:3d}, Average loss {:.3f},time_used {}'.format(iter, loss_avg,end-start))
     loss_train.append(loss_avg)    
 
 net_glob.eval()
@@ -121,4 +170,4 @@ net_glob.eval()
 acc_test, loss_test = test_model(net_glob, data_and_label,test_idxs, args)
 #print("Training accuracy: {:.2f}".format(acc_train))
 print("Testing accuracy: {:.2f}".format(acc_test))
-
+'''''

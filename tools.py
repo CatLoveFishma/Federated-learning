@@ -4,6 +4,7 @@ from torch import nn
 from torch import tensor
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
+import numpy as np
 
 def Normalize(data):
     min_number=min(data)
@@ -16,16 +17,15 @@ def Normalize(data):
     norm_data=(norm_data-0.5)/0.5
     return norm_data
 
-def FedAvg(w): 
+def FedAvg(w,precision): 
     w_avg = copy.deepcopy(w[0]) 
     #w_avg.to(t.float32)
     for k in w_avg.keys(): 
         for i in range(1, len(w)):
-            w_avg[k].to(torch.float32)
-            w[i][k].to(torch.float32)
             w_avg[k] =(w_avg[k]+ w[i][k] ).to(torch.float32)
+            
         w_avg[k] = torch.div(w_avg[k], len(w))
-        
+        w_avg[k]=np.around(w_avg[k],decimals=precision)
     return w_avg 
 
 class DatasetSplit(Dataset): #Dataset是标准class
@@ -45,7 +45,7 @@ def test_model(net_g, dataset,idxs,args):
     # testing
     test_loss = 0
     correct = 0
-    data_loader = DataLoader(DatasetSplit(dataset, idxs), batch_size=args.bs)
+    data_loader = DataLoader(DatasetSplit(dataset, idxs), batch_size=args.local_bs)
     l = len(data_loader)
     for idx, (data, target) in enumerate(data_loader):
         if torch.cuda.is_available() and args.gpu != -1:
