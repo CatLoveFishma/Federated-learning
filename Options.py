@@ -8,12 +8,13 @@ def args_parser():
     parser.add_argument("--aggregate_epochs",default=10,help="聚合的轮数")
     parser.add_argument("--lr",default=0.001,help="学习率")
     parser.add_argument("--momentum",default=0.5,help="SGD momentum (default: 0.5)")
-    parser.add_argument("--device",default='cpu',help="使用的设备")
-    parser.add_argument("--local_bs",default=64,help="本地训练的batchsize")
+    parser.add_argument('--gpu', type=int, default=0, help="GPU ID, -1 for CPU")
+    parser.add_argument("--local_bs",default=10,help="本地训练的batchsize")
     parser.add_argument("--betas",default=(0.99,0.999),help="need betas")
     parser.add_argument("--wd",default=1e-5,help="SGD momentum (default: 0.5)")
     parser.add_argument("--epochs",default=20,help="SGD momentum (default: 0.5)")
     parser.add_argument('--verbose', action='store_true', help='verbose print')
+    parser.add_argument("--device",default='cpu',help="使用的设备")
     args = parser.parse_args()
     return args
 

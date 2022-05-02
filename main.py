@@ -49,7 +49,7 @@ for name,data in dataDic.items():
 splited_data=[]
 label=[]
 
-data_length=200
+data_length=300
 for name,data in processed_data.items():
     n=len(data)
     x=n//data_length
@@ -59,18 +59,23 @@ for name,data in processed_data.items():
 
 
 data_type='iid'
-clients_all=1000
+clients_all=100
  #每次训练的客户占所有客户的比例
 
 splited_data=torch.tensor(splited_data,dtype=torch.float32)
 label=torch.tensor(label,dtype=torch.long)
 data_and_label=torch.utils.data.TensorDataset(splited_data,label)
-
+#len(data_and_label)=18990数据太多，训练速度太慢，决定减小训练的数目
+data_index=[i for i in range(len(data_and_label))]
+num_items=5000
+select_index=np.random.choice(data_index,num_items,replace=False)
+data_and_label=data_and_label[select_index]
+data_and_label=torch.utils.data.TensorDataset(data_and_label[0],data_and_label[1])
 #可以用TensorDataset进行数据的打包
 if data_type =='iid':
-    num_items=int(len(label)*0.8/clients_all)
+    num_items=int(len(data_and_label)*0.8/clients_all)
     #留下20%的数据作为实验集
-    dict_users,all_idxs={},[i for i in range(len(label))]
+    dict_users,all_idxs={},[i for i in range(len(data_and_label))]
     test_idxs=[]
     for i in range(clients_all):
         dict_users[i]=set(np.random.choice(all_idxs,num_items,replace=False))
@@ -78,6 +83,7 @@ if data_type =='iid':
         all_idxs=list(set(all_idxs)-dict_users[i])
         #更新数据
     test_idxs=all_idxs
+
 
 #datatest=data_and_label[test_idxs]
 #datatrain=data[dict_users]
@@ -104,70 +110,52 @@ class option:
 '''''
 args=args_parser()
 
-epochs=12
+epochs=20
 #经过测试，12时不在收敛
 local_epoch=3
 loss_train=[]
 frac=args.r
 #[local_epochs,precision,r]
 
-chanshu=[[20,7,0.1],[20,7,0.3],[20,7,0.5],[20,6,0.5],[20,5,0.5],[20,4,0.5],[17,7,0.5],[14,7,0.5]]
+chanshu=[[20,7,1],[20,7,0.8],[20,7,0.6],[20,6,1],[20,5,1],[17,7,1],[14,7,1]]
 for x in chanshu:
-    args.local_ep=x[0]
-    frac=x[2]
-    args.precision=x[1]
-    savemodel='models'+"\saved_models_local_epochs_"+str(x[0])+"_r_"+str(x[2]).replace('.', '_')+"_precision_"+str(x[1])
-    os.system('mkdir '+savemodel)
-    for iter in range(epochs):
-        start=time.perf_counter()
-        loss_locals=[]
-        w_locals = [w_glob for i in range(clients_all)]
-        m=round(frac*clients_all)
-        idxs_users=np.random.choice(range(clients_all),m,replace=False)
-        #选出来的是客户的编号
-        for idx in idxs_users:
-            local=LocalUpdate(args=args,dataset=data_and_label,idxs=dict_users[idx])
-            w,loss=local.train(net=copy.deepcopy(net_glob))
-            w_locals[idx]=copy.deepcopy(w)
-            loss_locals.append(copy.deepcopy(loss))
-        w_glob=FedAvg(w_locals,args.precision)
-        net_glob.load_state_dict(w_glob)
-        
-        torch.save(net_glob,savemodel+"/model_epoch_"+str(iter+1)+".pt")
-        loss_avg=sum(loss_locals)/len(loss_locals)
-        end=time.perf_counter()
-        print('Round {:3d}, Average loss {:.3f},time_used {}'.format(iter, loss_avg,end-start))
-        loss_train.append(loss_avg)    
+  net_glob=CNN_1D_2L(data_length)
+  print(net_glob)
+  net_glob.train()
+  w_glob = net_glob.state_dict()
+  args.local_ep=x[0]
+  frac=x[2]
+  args.precision=x[1]
+  pici="local_epochs_"+str(x[0])+"_r_"+str(x[2]).replace('.', '_')+"_precision_"+str(x[1])
+  savemodel='models'+"/saved_models_local_epochs_"+str(x[0])+"_r_"+str(x[2]).replace('.', '_')+"_precision_"+str(x[1])
+  if os.path.exists(savemodel):
+    pass
+  else:
+    os.mkdir(savemodel)
+  print("length={}************{}***********".format(data_length,pici))
+  for iter in range(epochs):
+      start=time.perf_counter()
+      loss_locals=[]
+      w_locals = [w_glob for i in range(clients_all)]
+      m=round(frac*clients_all)
+      idxs_users=np.random.choice(range(clients_all),m,replace=False)
+      #选出来的是客户的编号
+      for idx in idxs_users:
+          local=LocalUpdate(args=args,dataset=data_and_label,idxs=dict_users[idx])
+          w,loss=local.train(net=copy.deepcopy(net_glob))
+          w_locals[idx]=copy.deepcopy(w)
+          loss_locals.append(copy.deepcopy(loss))
+      w_glob=FedAvg(w_locals,args.precision)
+      net_glob.load_state_dict(w_glob)
+      
+      torch.save(net_glob,savemodel+"/model_epoch_"+str(iter+1)+".pt")
+      loss_avg=sum(loss_locals)/len(loss_locals)
+      end=time.perf_counter()
+      print('Round {:3d}, Average loss {:.3f},time_used {}'.format(iter, loss_avg,end-start))
+      loss_train.append(loss_avg)    
 
-    net_glob.eval()
-    #acc_train, loss_train = test_model(net_glob, dataset_train, args)
-    acc_test, loss_test = test_model(net_glob, data_and_label,test_idxs, args)
-    #print("Training accuracy: {:.2f}".format(acc_train))
-    print("Testing accuracy: {:.2f}".format(acc_test))
-'''''
-for iter in range(epochs):
-
-    start=time.perf_counter()
-    loss_locals=[]
-    w_locals = [w_glob for i in range(clients_all)]
-    m=round(frac*clients_all)
-    idxs_users=np.random.choice(range(clients_all),m,replace=False)
-    #选出来的是客户的编号
-    for idx in idxs_users:
-        local=LocalUpdate(args=args,dataset=data_and_label,idxs=dict_users[idx])
-        w,loss=local.train(net=copy.deepcopy(net_glob))
-        w_locals[idx]=copy.deepcopy(w)
-        loss_locals.append(copy.deepcopy(loss))
-    w_glob=FedAvg(w_locals,args.precision)
-    net_glob.load_state_dict(w_glob)
-    loss_avg=sum(loss_locals)/len(loss_locals)
-    end=time.perf_counter()
-    print('Round {:3d}, Average loss {:.3f},time_used {}'.format(iter, loss_avg,end-start))
-    loss_train.append(loss_avg)    
-
-net_glob.eval()
-#acc_train, loss_train = test_model(net_glob, dataset_train, args)
-acc_test, loss_test = test_model(net_glob, data_and_label,test_idxs, args)
-#print("Training accuracy: {:.2f}".format(acc_train))
-print("Testing accuracy: {:.2f}".format(acc_test))
-'''''
+  net_glob.eval()
+  #acc_train, loss_train = test_model(net_glob, dataset_train, args)
+  acc_test, loss_test = test_model(net_glob, data_and_label,test_idxs, args)
+  #print("Training accuracy: {:.2f}".format(acc_train))
+  print("Testing accuracy: {:.2f}".format(acc_test))
